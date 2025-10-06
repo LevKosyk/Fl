@@ -16,8 +16,6 @@ pids
 build/
 dist/
 
-# Environment files
-.env*
 
 # IDE and editor files
 .vscode/
