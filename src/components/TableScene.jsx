@@ -587,7 +587,7 @@ const GridPage = memo(() => {
       {/* VIDEO SCREEN - Fullscreen */}
       {showVideo && !activeItem && (
         <VideoScreen
-          src="/assets/IMG_2424.mp4"
+          src="/assets/video_2025-10-06_20-16-58.mp4"
           onFinish={() => {
             setShowVideo(false);
             setModalType(null);
