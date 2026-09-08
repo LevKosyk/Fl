@@ -18,13 +18,12 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="fixed inset-0 bg-black flex items-center justify-center z-50">
-          <div className="text-center p-8 bg-gray-900 rounded-lg max-w-md">
-            <div className="text-6xl mb-4">⚠️</div>
-            <h2 className="text-2xl font-bold text-white mb-2">Что-то пошло не так</h2>
-            <p className="text-gray-300 mb-6">Произошла непредвиденная ошибка. Пожалуйста, перезагрузите страницу.</p>
+        <div className="app-error" role="alert">
+          <div className="app-error__card">
+            <div className="app-error__icon" aria-hidden="true">⚠️</div>
+            <h2>Что-то пошло не так</h2>
+            <p>Произошла непредвиденная ошибка. Пожалуйста, перезагрузите страницу.</p>
             <button 
-              className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded"
               onClick={() => window.location.reload()}
             >
               Перезагрузить страницу

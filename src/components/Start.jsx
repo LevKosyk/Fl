@@ -1,12 +1,19 @@
 import React, { useEffect, useRef, useState, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+const SECRET = 'я тебя люблю';
+const START_DATE = new Date('2023-02-14').getTime();
+const TOGETHER_LINE_INDEX = 2;
+
+const getTogetherSeconds = () => Math.max(0, Math.floor((Date.now() - START_DATE) / 1000));
+const formatTogetherLine = (seconds) => `Мы вместе: ${seconds.toLocaleString('en-US')} секунд`;
+
 const Start = memo(({ onSuccess }) => {
   const canvasRef = useRef(null);
   const inputRef = useRef(null);
   const [msg, setMsg] = useState('');
-  const SECRET = 'я тебя люблю';
   const [attempts, setAttempts] = useState(0);
+  const [togetherSeconds, setTogetherSeconds] = useState(getTogetherSeconds);
 
   const [displayedLine, setDisplayedLine] = useState("");
   const [lineIndex, setLineIndex] = useState(0);
@@ -18,32 +25,27 @@ const Start = memo(({ onSuccess }) => {
 
   const navigate = useNavigate();
 
-  const startDate = new Date("2023-02-14");
-  const now = new Date();
-  const secondsTogether = Math.floor((now - startDate) / 1000);
+  const [lines] = useState(() => [
+    "Загрузка данных 2.0...",
+    "Синхронизация чувств завершена 2.0 ...",
+    formatTogetherLine(getTogetherSeconds()),
+    "Сообщений в Telegram: 68 765",
+    "Сказано «я тебя люблю»: ∞",
+    "Совместных фото: хуй знает мне лень считать - дохуя",
+    "Совместных поездок: 8",
+    "Сказано «спокойной ночи»: 232",
+    "Поцелуев (примерно): бесконечно",
+    "Не срачек: оооо ну тут мы разойдемся по полнйой -10000001 - это только официальная статистика",
+    "Продано наркотиков на сумму: 0 (жаль)",
+    "И это уже наша история... ❤️",
+  ]);
 
-  const lines = useRef([
-    "Загрузка данных...",
-    "Синхронизация чувств завершена...",
-    `Мы вместе: ${secondsTogether.toLocaleString()} секунд`,
-    "Сообщений в Telegram: 33 567",
-    "Сказано «я тебя люблю»: 276 раз",
-    "Совместных фото: 2",
-    "Совместных поездок: 2",
-    "Сказано «спокойной ночи»: 98 раз",
-    "Совместных фильмов просмотрено: 18",
-    "Поцелуев (примерно): бесконечно ",
-    "Не срачек: 1",
-    "Продано наркотиков на сумму: 0",
-    "И это только начало нашей истории... ❤️",
-  ]).current;
+  useEffect(() => {
+    const timerId = window.setInterval(() => {
+      setTogetherSeconds(getTogetherSeconds());
+    }, 1000);
 
-  const handleResize = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
+    return () => window.clearInterval(timerId);
   }, []);
 
   useEffect(() => {
@@ -51,16 +53,26 @@ const Start = memo(({ onSuccess }) => {
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
-    let w = (canvas.width = window.innerWidth);
-    let h = (canvas.height = window.innerHeight);
+    let w;
+    let h;
+    let fontSize;
+    let drops;
     const chars = 'ятебялюблю';
-    const fontSize = Math.max(12, Math.floor(Math.min(w, h) / 60));
-    const columns = Math.floor(w / fontSize);
-    const drops = new Array(columns).fill(0);
-
     let animationFrameId;
+    let lastFrame = 0;
+    const frameInterval = 1000 / 24;
 
-    const draw = () => {
+    const resizeCanvas = () => {
+      w = canvas.width = window.innerWidth;
+      h = canvas.height = window.innerHeight;
+      fontSize = Math.max(12, Math.floor(Math.min(w, h) / 60));
+      drops = new Array(Math.ceil(w / fontSize)).fill(0);
+    };
+
+    const draw = (timestamp) => {
+      animationFrameId = requestAnimationFrame(draw);
+      if (document.hidden || timestamp - lastFrame < frameInterval) return;
+      lastFrame = timestamp;
       ctx.fillStyle = `rgba(0,0,0,0.06)`;
       ctx.fillRect(0, 0, w, h);
       ctx.fillStyle = `rgba(0,255,0,1)`; // всегда полная яркость, fade идёт через CSS
@@ -71,19 +83,18 @@ const Start = memo(({ onSuccess }) => {
         if (drops[i] * fontSize > h && Math.random() > 0.975) drops[i] = 0;
         drops[i]++;
       }
-      animationFrameId = requestAnimationFrame(draw);
     };
 
+    resizeCanvas();
     animationFrameId = requestAnimationFrame(draw);
-    
-    window.addEventListener('resize', handleResize);
+    window.addEventListener('resize', resizeCanvas, { passive: true });
     inputRef.current?.focus();
 
     return () => {
       cancelAnimationFrame(animationFrameId);
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', resizeCanvas);
     };
-  }, [handleResize]);
+  }, []);
 
   const handleKey = useCallback((e) => {
     if (e.key === 'Enter') {
@@ -92,7 +103,7 @@ const Start = memo(({ onSuccess }) => {
         setMsg('Пустой ввод.');
         return;
       }
-      if (v === SECRET) {
+      if (v.toLocaleLowerCase('ru-RU') === SECRET) {
         setMsg('Доступ разрешён');
         if (onSuccess) onSuccess();
         setLineIndex(0);
@@ -112,21 +123,26 @@ const Start = memo(({ onSuccess }) => {
         e.target.value = '';
       }
     }
-  }, [SECRET, onSuccess, attempts]);
+  }, [onSuccess, attempts]);
 
   useEffect(() => {
     if (msg !== 'Доступ разрешён') return;
 
-    let timeoutId;
+    const timeoutIds = [];
+    const schedule = (callback, delay) => {
+      const id = window.setTimeout(callback, delay);
+      timeoutIds.push(id);
+      return id;
+    };
 
     if (lineIndex < lines.length) {
       if (charIndex < lines[lineIndex].length) {
-        timeoutId = setTimeout(() => {
+        schedule(() => {
           setDisplayedLine((prev) => prev + lines[lineIndex][charIndex]);
           setCharIndex(charIndex + 1);
         }, 50);
       } else {
-        timeoutId = setTimeout(() => {
+        schedule(() => {
           setAllLines((prev) => [...prev, lines[lineIndex]]);
           setLineIndex(lineIndex + 1);
           setCharIndex(0);
@@ -134,16 +150,16 @@ const Start = memo(({ onSuccess }) => {
         }, 500);
       }
     } else if (lineIndex === lines.length) {
-      timeoutId = setTimeout(() => {
+      schedule(() => {
         // 1. Сначала исчезает консоль
         setConsoleFade(true);
 
         // 2. Потом исчезает матрица через CSS-opacity
-        setTimeout(() => {
+        schedule(() => {
           setMatrixFade(true);
           
           // 3. После завершения анимации затемнения переходим на страницу /table
-          setTimeout(() => {
+          schedule(() => {
             navigate('/table');
           }, 5000); // Соответствует времени перехода opacity 5s ease
         }, 3000); // ждём окончания затухания консоли
@@ -151,9 +167,9 @@ const Start = memo(({ onSuccess }) => {
     }
 
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
+      timeoutIds.forEach(clearTimeout);
     };
-  }, [charIndex, lineIndex, lines.length, msg, navigate]);
+  }, [charIndex, lineIndex, lines, msg, navigate]);
 
   return (
     <div style={{ position: 'relative', height: '100vh', overflow: 'hidden', background: '#000' }}>
@@ -212,7 +228,7 @@ const Start = memo(({ onSuccess }) => {
                 }}
               >
                 {allLines.map((line, i) => (
-                  <div key={i}>{line}</div>
+                  <div key={i}>{i === TOGETHER_LINE_INDEX ? formatTogetherLine(togetherSeconds) : line}</div>
                 ))}
                 {displayedLine && <div>{displayedLine}<span className="animate-pulse">▋</span></div>}
               </div>

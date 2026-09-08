@@ -1,88 +1,143 @@
-import React, { useState, useEffect, useCallback, memo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, memo } from "react";
 import "./styles/Table.css";
-import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import VideoScreen from "./VideoScreen";
-import { Modal, Button, Container, Row, Col, Card, CloseButton } from 'react-bootstrap';
+import KissCatchGame from "./KissCatchGame";
+import BestLevaGame from "./BestLevaGame";
+import WhoSaidItGame from "./WhoSaidItGame";
+import ChatWrapped from "./ChatWrapped";
+import { Modal, Button, Card } from 'react-bootstrap';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-const items = [
-  { id: "chat", label: "Переписка", type: "chat", area: "div1", bg: "bg-yellow-500" },
-  { id: "photos", label: "Фотографии", type: "photos", area: "div2", bg: "bg-pink-500" },
-  { id: "map", label: "Карта", type: "map", area: "div3", bg: "bg-green-500" },
-  { id: "letter", label: "Письмо", type: "letter", area: "div4", bg: "bg-indigo-500" },
-  { id: "timeline", label: "Хронология", type: "timeline", area: "div5", bg: "bg-red-500" },
-  { id: "text", label: 'Расстояние само по себе ничего не значит. Оно становится испытанием: либо ты понимаешь, что любовь — лишь привычка, и тогда расстояние всё рушит, либо ты осознаёшь, что любовь — это глубже, чем привычка, и тогда никакие километры не в силах её убить.', author: "Марк Аврелий", year: "245 до н.э.", type: "citation", area: "div6", bg: "bg-blue-500" },
-  { id: "text2", label: "Специальный сюрприз", description: "Нажми кнопку, чтобы увидеть кое-что особенное...", type: "video", area: "div7", bg: "bg-purple-500" },
+import storyPhotoOne from "../assets/years/2026/IMG_9095.jpg";
+import storyPhotoTwo from "../assets/years/2026/IMG_9096.jpg";
+import { AVAILABLE_YEARS, YEAR_DATA } from "../data/yearData";
+
+const REQUIRED_SECTION_IDS = ["chat", "photos", "map", "letter", "timeline"];
+
+const storySlides = [
+  { id: "walk-one", src: storyPhotoOne, question: "Идём гулять?", options: ["Да", "Нет"] },
+  { id: "walk-two", src: storyPhotoTwo, question: "Ну что, идём?", options: ["Да", "Конечно"] },
 ];
 
-const markers = [
-  { id: 1, position: [49.978944, 36.256861], text: "Наше первое совместное фото", photo: "/assets/map/photo_2025-09-24_17-58-11.jpg" },
-  { id: 2, position: [49.595257, 36.336346], text: "Красавцы", photo: "/assets/map/photo_2025-09-24_17-58-11.jpg" },
-  { id: 3, position: [49.594700, 36.336627], text: "Еще красавцы", photo: "/assets/map/photo_2025-09-24_17-58-13.jpg" },
-  { id: 4, position: [49.975804, 36.257101], text: "Окунь", photo: "/assets/map/photo_2025-09-24_17-58-18.jpg" },
-  { id: 5, position: [49.975504, 36.257101], text: "Пиздьож", photo: "/assets/map/photo_2025-09-24_17-58-32.jpg" },
-  { id: 6, position: [49.940117, 36.275532], text: "Очаровательная и я", photo: "/assets/map/photo_2025-09-24_17-58-35.jpg" },
-  { id: 7, position: [49.595000, 36.336234], text: "Наше второе совместное фото", photo: "/assets/map/photo_2025-09-24_17-58-22.jpg" },
-  { id: 8, position: [49.999199, 36.224263], text: "Довольная", photo: "../assets/map/photo_2025-09-24_17-58-45.jpg" },
-  { id: 9, position: [49.976062, 36.255201], text: "Мы впервые как пара", photo: "/assets/map/photo_2025-09-24_17-58-55.jpg" },
-  { id: 10, position: [49.594700, 36.336227], text: "Семейное фото", photo: "/assets/map/photo_2025-09-24_17-59-03.jpg" },
-  { id: 11, position: [50.444273, 30.431027], text: "Персик", photo: "/assets/map/photo_2025-09-24_18-06-47.jpg" },
-  { id: 12, position: [50.444273, 30.431027], text: "Горловой", photo: "/assets/map/photo_2025-09-24_18-07-01.jpg" },
+const CardIcon = memo(({ name, compact = false, locked = false }) => {
+  const paths = {
+    story: <><rect x="7" y="3" width="12" height="16" rx="3" /><path d="M5 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h9" /><path d="m11 8 5 3-5 3Z" /></>,
+    chat: <><path d="M21 12a8 8 0 0 1-8 8H6l-4 2 1.4-4.2A9 9 0 1 1 21 12Z" /><path d="M8 12h.01M12 12h.01M16 12h.01" /></>,
+    photos: <><rect x="3" y="5" width="14" height="16" rx="3" /><path d="M7 5V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2h-2" /><circle cx="8" cy="10" r="1.5" /><path d="m5 18 4-4 3 3 2-2 3 3" /></>,
+    map: <><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3Z" /><path d="M9 3v15M15 6v15" /></>,
+    letter: <><rect x="3" y="5" width="18" height="14" rx="3" /><path d="m4 7 8 6 8-6" /><path d="m4 17 5-5M20 17l-5-5" /></>,
+    timeline: <><path d="M7 4v16M7 7h10M7 12h7M7 17h10" /><circle cx="7" cy="7" r="2" /><circle cx="7" cy="12" r="2" /><circle cx="7" cy="17" r="2" /></>,
+    quote: <><path d="M9 11H5a4 4 0 0 0 4 4v4H5a8 8 0 0 1 0-16h4ZM21 11h-4a4 4 0 0 0 4 4v4h-4a8 8 0 0 1 0-16h4Z" /></>,
+    stats: <><path d="M5 20V10M12 20V4M19 20v-7" /><path d="M3 20h18" /><circle cx="5" cy="7" r="2" /><circle cx="19" cy="10" r="2" /></>,
+  };
+
+  return (
+    <span className={`card-icon ${compact ? 'card-icon--compact' : ''}`} aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        {paths[name]}
+      </svg>
+      {locked && <span className="card-icon__lock" />}
+    </span>
+  );
+});
+
+const items = [
+  { id: "chat", label: "Переписка", type: "chat", area: "div1" },
+  { id: "photos", label: "Фотографии", type: "photos", area: "div2" },
+  { id: "map", label: "Карта", type: "map", area: "div3" },
+  { id: "letter", label: "Письмо", type: "letter", area: "div4" },
+  { id: "timeline", label: "Хронология", type: "timeline", area: "div5" },
+  { id: "text", label: 'Расстояние само по себе ничего не значит. Оно становится испытанием: либо ты понимаешь, что любовь — лишь привычка, и тогда расстояние всё рушит, либо ты осознаёшь, что любовь — это глубже, чем привычка, и тогда никакие километры не в силах её убить.', author: "Марк Аврелий", year: "245 до н.э.", type: "citation", area: "div6" },
+  { id: "text2", label: "Специальный сюрприз", description: "Нажми кнопку, чтобы увидеть кое-что особенное...", type: "video", area: "div7" },
 ];
 
 // Photo marker component for displaying thumbnails directly on the map
-const PhotoMarker = ({ position, photo, text }) => {
-  // Create a custom icon with the photo thumbnail
-  const createPhotoIcon = (photoUrl, text) => {
-    return L.divIcon({
+const PhotoMarker = memo(({ position, photo, text }) => {
+  const photoIcon = useMemo(() => L.divIcon({
       className: 'enhanced-photo-marker',
       html: `
         <div class="enhanced-marker-container">
           <div class="marker-glow"></div>
           <img 
-            src="${photoUrl}" 
+            src="${photo}"
             alt="${text}"
             class="enhanced-marker-image"
-            onerror="this.src='https://placehold.co/60x60/cccccc/ffffff?text=📷'"
           />
-          <div class="marker-heart">❤️</div>
+          <div class="marker-heart">♥</div>
         </div>
       `,
-      iconSize: [70, 70],
-      iconAnchor: [35, 35]
-    });
-  };
-
-  // Create the photo icon
-  const photoUrl = `../assets/map/${photo.split('/').pop()}`;
-  const photoIcon = createPhotoIcon(photoUrl, text);
+      iconSize: [76, 84],
+      iconAnchor: [38, 76]
+    }), [photo, text]);
 
   return (
     <Marker position={position} icon={photoIcon}>
       <Popup className="enhanced-popup">
-        <div class="popup-container">
-          <div class="popup-header">
-            <h3 class="popup-title">{text}</h3>
+        <div className="popup-container">
+          <div className="popup-header">
+            <span>НАША ТОЧКА</span>
+            <h3 className="popup-title">{text}</h3>
           </div>
-          <div class="popup-image-container">
+          <div className="popup-image-container">
             <img
-              src={photoUrl}
+              src={photo}
               alt={text}
-              class="popup-image"
-              onError={(e) => {
-                e.target.src = 'https://placehold.co/200x150/cccccc/ffffff?text=Photo+Not+Found';
-              }}
+              className="popup-image"
+              loading="lazy"
+              decoding="async"
+              onError={(event) => { event.currentTarget.style.display = 'none'; }}
             />
           </div>
-          <div class="popup-footer">
+          <div className="popup-footer">
           </div>
         </div>
       </Popup>
     </Marker>
   );
-};
+});
+
+const RouteMarker = memo(({ position, text, detail, order }) => {
+  const routeIcon = useMemo(() => L.divIcon({
+    className: 'route-marker-shell',
+    html: `<div class="route-marker"><span>${order}</span></div>`,
+    iconSize: [42, 48],
+    iconAnchor: [21, 44],
+    popupAnchor: [0, -42],
+  }), [order]);
+
+  return (
+    <Marker position={position} icon={routeIcon}>
+      <Popup className="enhanced-popup route-popup">
+        <div className="route-popup-content">
+          <span>ТОЧКА {String(order).padStart(2, '0')}</span>
+          <h3>{text}</h3>
+          <p>{detail}</p>
+        </div>
+      </Popup>
+    </Marker>
+  );
+});
+
+const MapViewport = memo(({ markers }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!markers.length) return undefined;
+
+    const bounds = L.latLngBounds(markers.map(({ position }) => position));
+    const resizeId = window.setTimeout(() => {
+      map.invalidateSize();
+      map.fitBounds(bounds, { padding: [42, 42], maxZoom: 13 });
+    }, 180);
+
+    return () => window.clearTimeout(resizeId);
+  }, [map, markers]);
+
+  return null;
+});
 
 // Sample chat messages
 const chatMessages = [
@@ -102,157 +157,106 @@ const chatMessages = [
 ];
 
 
-const photoData = [
-  {
-    id: "photo1",
-    name: "Наш первый вечер",
-    src: "/assets/First.JPG",
-    description: ""
-  },
-  {
-    id: "photo2",
-    name: "Один из моментов вместе",
-    src: "/assets/Fifs.JPG", 
-    description: ""
-  },
-  {
-    id: "photo3",
-    name: "Первое путешествие. Именно это фото заложило начало всему",
-    src: "/assets/Third.JPG",
-    description: ""
-  },
-  {
-    id: "photo4",
-    name: "На закате",
-    src: "/assets/Six.JPG",
-    description: ""
-  },
-  {
-    id: "photo5",
-    name: "Просто оставлю это здесь",
-    src: "/assets/abs.JPG",
-    description: ""
-  },
-  {
-    id: "photo6",
-    name: "2.0",
-    src: "/assets/Fours.JPG",
-    description: ""
-  },
-  {
-    id: "photo7",
-    name: "Особенный момент",
-    src: "/assets/photo_2025-10-05_16-58-10.jpg",
-    description: ""
-  },
-  {
-    id: "photo8",
-    name: "Этот взгляд",
-    src: "/assets/Second.PNG",
-    description: ""
-  },
-  {
-    id: "photo9",
-    name: "Красавцы",
-    src: "/assets/photo_2025-10-05_16-58-10.jpg",
-    description: ""
-  }
-];
-
-const timelineEvents = [
-  { id: 1, date: "26.06.2025", title: "Наша первая встреча", description: "В этот день мы впервые встретились. И всё именно тут началось!" },
-  { id: 2, date: "29.06.2025", title: "Первый поцелуй", description: "Под звездами в парке. Я помню это как вчера." },
-  { id: 3, date: "15.07.2025", title: "Первые цветы", description: "Эти краски я запомню на всю жизнь." },
-  { id: 4, date: "11.08.2025", title: "Первая поездка", description: "Наша первая совместная поездка. Именно с неё начались мы." },
-  { id: 5, date: "13.10.2025", title: "День рождения", description: "Наш первый день рождения вместе. Я тебя люблю." },
-  { id: 6, date: "--.--.2026", title: "Первое свидание", description: "Этот день когда-нибудь настанет." },
-];
+const getInitialYear = () => {
+  const requestedYear = new URLSearchParams(window.location.search).get("year");
+  return YEAR_DATA[requestedYear] ? requestedYear : AVAILABLE_YEARS.at(-1);
+};
 
 const GridPage = memo(() => {
+  const [activeYear, setActiveYear] = useState(getInitialYear);
   const [activeItem, setActiveItem] = useState(null);
-  const [isOpen, setIsOpen] = useState(false);
   const [modalType, setModalType] = useState(null); // Track which modal is open
-  const onClose = useCallback(() => {
-    setIsOpen(false);
-    setModalType(null);
-  }, []);
-  const onOpen = useCallback(() => {
-    setIsOpen(true);
-    setModalType('chat');
-  }, []);
-  const [open, setOpen] = useState(false);
-  const [showCitation, setShowCitation] = useState(false);
-  const [showMap, setShowMap] = useState(false);
   const [showLetter, setShowLetter] = useState(false);
-
   const [visibleMessages, setVisibleMessages] = useState([]);
-  const [index, setIndex] = useState(0);
-
-  const [stack, setStack] = useState([photoData]);
-  const current = stack[stack.length - 1];
-
-  const openItem = useCallback((item) => {
-    if (item.type === "folder") {
-      setStack([...stack, item.children]);
-    }
-  }, [stack]);
-
-  const goBack = useCallback(() => {
-    if (stack.length > 1) {
-      setStack(stack.slice(0, -1));
-    } else {
-      onClose();
-    }
-  }, [stack, onClose]);
-
+  const [isTyping, setIsTyping] = useState(false);
   const [showVideo, setShowVideo] = useState(false);
+  const [selectedPhoto, setSelectedPhoto] = useState(null);
+  const [storyIndex, setStoryIndex] = useState(0);
+  const [storyVotes, setStoryVotes] = useState({});
+  const [puzzlesSolvedByYear, setPuzzlesSolvedByYear] = useState(() =>
+    Object.fromEntries(AVAILABLE_YEARS.map((year) => [year, new Set()]))
+  );
+  const chatEndRef = useRef(null);
+  const storyTouchStartX = useRef(null);
+  const [visitedByYear, setVisitedByYear] = useState(() =>
+    Object.fromEntries(AVAILABLE_YEARS.map((year) => [year, new Set()]))
+  );
 
-  const [visitedItems, setVisitedItems] = useState(new Set());
+  const yearContent = YEAR_DATA[activeYear];
+  const visitedItems = visitedByYear[activeYear] ?? new Set();
+  const solvedPuzzles = puzzlesSolvedByYear[activeYear] ?? new Set();
+  const isLetterPuzzleSolved = solvedPuzzles.has('letter');
+  const isStoryPuzzleSolved = solvedPuzzles.has('stories');
 
-  const allSections = ["chat", "photos", "map", "letter", "timeline"];
-
-  const allSectionsVisited = allSections.every(section => visitedItems.has(section));
+  const allSectionsVisited = REQUIRED_SECTION_IDS.every(section => visitedItems.has(section));
 
   const markAsVisited = useCallback((itemId) => {
-    setVisitedItems(prev => new Set(prev).add(itemId));
-  }, []);
+    if (!REQUIRED_SECTION_IDS.includes(itemId)) return;
+    setVisitedByYear(prev => {
+      const current = prev[activeYear] ?? new Set();
+      if (current.has(itemId)) return prev;
+      return { ...prev, [activeYear]: new Set(current).add(itemId) };
+    });
+  }, [activeYear]);
 
   useEffect(() => {
-    if (activeItem?.id === "chat" && isOpen) {
+    const url = new URL(window.location.href);
+    url.searchParams.set("year", activeYear);
+    window.history.replaceState({}, "", url);
+  }, [activeYear]);
+
+  useEffect(() => {
+    if (modalType === "chat" && activeYear === "2025") {
       setVisibleMessages([]);
-      setIndex(0);
+      setIsTyping(true);
 
       let timeoutId;
+      let cancelled = false;
 
       const showNextMessage = (currentIndex) => {
         if (currentIndex < chatMessages.length) {
-          setVisibleMessages(prevMessages => {
-            if (!prevMessages.some(msg => msg.id === chatMessages[currentIndex].id)) {
-              console.log("Showing message:", chatMessages[currentIndex]);
-              return [...prevMessages, chatMessages[currentIndex]];
-            }
-            return prevMessages;
-          });
-
           timeoutId = setTimeout(() => {
-            showNextMessage(currentIndex + 1);
-          }, 2000);
+            if (cancelled) return;
+            setVisibleMessages(prevMessages => [...prevMessages, chatMessages[currentIndex]]);
+            setIsTyping(false);
+            timeoutId = setTimeout(() => {
+              if (cancelled) return;
+              setIsTyping(true);
+              showNextMessage(currentIndex + 1);
+            }, 320);
+          }, currentIndex === 0 ? 500 : 780);
+        } else {
+          setIsTyping(false);
         }
       };
 
       showNextMessage(0);
 
       return () => {
+        cancelled = true;
         if (timeoutId) clearTimeout(timeoutId);
+        setIsTyping(false);
       };
     }
-  }, [isOpen, activeItem, chatMessages.length]);
+  }, [modalType, activeYear]);
 
   useEffect(() => {
-    if (activeItem && activeItem.id) {
-      markAsVisited(activeItem.id);
+    if (modalType === "chat") {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [activeItem, markAsVisited]);
+  }, [visibleMessages, isTyping, modalType]);
+
+  useEffect(() => {
+    if (modalType !== "chat" || activeYear !== "2026") return undefined;
+
+    const handleStoryKeys = (event) => {
+      if (event.key === "ArrowLeft") setStoryIndex(index => Math.max(0, index - 1));
+      if (event.key === "ArrowRight") setStoryIndex(index => Math.min(storySlides.length - 1, index + 1));
+    };
+
+    window.addEventListener("keydown", handleStoryKeys);
+    return () => window.removeEventListener("keydown", handleStoryKeys);
+  }, [modalType, activeYear]);
 
   const renderItemContent = useCallback((item) => {
     switch (item.type) {
@@ -281,13 +285,13 @@ const GridPage = memo(() => {
         return (
           <div className="grid-item-container">
             <div className="grid-item-text">
-              <div className="text-2xl mb-1">❝</div>
+              <CardIcon name="quote" compact />
               <blockquote className="italic text-xs mb-2 line-clamp-4">
-                {item.label}
+                {yearContent.quote.text}
               </blockquote>
               <div className="text-right text-xs">
-                <cite className="font-bold">— {item.author}</cite>
-                <div>{item.year}</div>
+                <cite className="font-bold">{yearContent.quote.author}</cite>
+                <div>{yearContent.quote.date}</div>
               </div>
             </div>
           </div>
@@ -296,32 +300,53 @@ const GridPage = memo(() => {
         return (
           <div className="grid-item-container map-grid-item">
             <div className="grid-item-text">
-              <div className="map-grid-icon mb-3">🗺️</div>
+              <CardIcon name="map" />
               <h3 className="text-lg font-bold mb-2 map-grid-title">Карта</h3>
               <p className="text-xs mb-3 map-grid-subtitle">Нажмите, чтобы открыть</p>
               <div className="map-stats-badge mt-3">
-                <span className="badge bg-light text-dark">{markers.length} мест</span>
+                <span className="badge bg-light text-dark">
+                  {yearContent.markers.length
+                    ? `${yearContent.markers.length} ${yearContent.route ? "точек" : "мест"}`
+                    : "места скоро"}
+                </span>
               </div>
             </div>
           </div>
         );
       case "timeline":
         return (
-          <div className="grid-item-container">
+          <div className={`grid-item-container ${activeYear === '2026' ? 'quiz-grid-item' : ''}`}>
             <div className="grid-item-text">
-              <h3 className="text-lg font-bold mb-1">Хронология</h3>
-              <p className="text-xs">Нажмите, чтобы открыть</p>
+              <CardIcon name={activeYear === '2026' ? 'quote' : 'timeline'} />
+              <h3 className="text-lg font-bold mb-1">{activeYear === '2026' ? 'Кто из нас?' : 'Хронология'}</h3>
+              <p className="text-xs">{activeYear === '2026' ? 'Угадай автора наших сообщений' : 'Нажмите, чтобы открыть'}</p>
+              {activeYear === '2026' && <span className="quiz-grid-badge">15 фраз · 2 автора</span>}
             </div>
           </div>
         );
       case "letter":
+        if (activeYear === '2026') {
+          return (
+            <div className="grid-item-container stats-grid-item">
+              <div className="grid-item-text">
+                <CardIcon name="stats" />
+                <p className="stats-grid-kicker">TELEGRAM WRAPPED</p>
+                <h3 className="text-lg font-bold mb-2 stats-grid-title">Статистика<br />без цензуры</h3>
+                <p className="text-xs stats-grid-subtitle">63 497 сообщений</p>
+                <span className="stats-grid-badge">Смотреть отчёт</span>
+                <div className="stats-grid-chart" aria-hidden="true">
+                  {[42, 68, 53, 88, 62, 96, 74].map((height, index) => <i key={index} style={{ height: `${height}%` }} />)}
+                </div>
+              </div>
+            </div>
+          );
+        }
         return (
           <div className="grid-item-container letter-grid-item">
             <div className="grid-item-text">
-              <div className="letter-grid-icon mb-3">💌</div>
+              <CardIcon name="letter" locked={!isLetterPuzzleSolved} />
               <h3 className="text-lg font-bold mb-2 letter-grid-title">{item.label}</h3>
               <p className="text-xs mb-3 letter-grid-subtitle">Нажми, чтобы открыть письмо</p>
-              <div className="heart-grid-icon pulse-animation">❤️</div>
             </div>
           </div>
         );
@@ -329,38 +354,49 @@ const GridPage = memo(() => {
         return (
           <div className="grid-item-container photo-grid-item">
             <div className="grid-item-text">
-              <div className="photo-grid-icon mb-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" className="bi bi-images" viewBox="0 0 16 16">
-                  <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" />
-                  <path d="M6.5 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm7 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-7 6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm7 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-bold mb-1">Фотографии</h3>
-              <p className="text-xs mb-2">Нажмите, чтобы открыть</p>
+              <CardIcon name="photos" />
+              <h3 className="text-lg font-bold mb-1 photo-grid-title">Фотографии</h3>
+              <p className="text-xs mb-2 photo-grid-subtitle">Нажмите, чтобы открыть</p>
               <div className="photo-counter-badge">
-                <span className="badge bg-light text-dark">{photoData.length} фото</span>
+                <span className="badge bg-light text-dark">{yearContent.photos.length} фото</span>
               </div>
-              <div className="photo-preview-grid mt-2">
-                {photoData.slice(0, 3).map((photo, index) => (
-                  <div key={index} className="photo-preview-thumb" style={{
-                    backgroundImage: `url(${photo.src})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center'
-                  }} />
+              <div className="photo-preview-grid mt-2" aria-hidden="true">
+                {yearContent.photos.slice(0, 3).map((photo, index) => (
+                  <span key={photo.id} className="photo-preview-thumb">
+                    <img
+                      src={photo.src}
+                      alt=""
+                      loading="eager"
+                      decoding="async"
+                      fetchPriority={index === 0 ? 'high' : 'auto'}
+                    />
+                  </span>
                 ))}
               </div>
             </div>
           </div>
         );
       case "chat":
+        if (activeYear === "2026") {
+          return (
+            <div className="grid-item-container story-grid-item">
+              <div className="grid-item-text">
+                <CardIcon name="story" locked={!isStoryPuzzleSolved} />
+                <div className="story-preview-stack" aria-hidden="true">
+                  <img src={storyPhotoOne} alt="" />
+                  <img src={storyPhotoTwo} alt="" />
+                </div>
+                <p className="story-grid-kicker">2 НОВЫЕ ИСТОРИИ</p>
+                <h3 className="text-lg font-bold mb-2">Истории</h3>
+                <p className="text-xs">Нажми, чтобы посмотреть</p>
+              </div>
+            </div>
+          );
+        }
         return (
           <div className="grid-item-container chat-grid-item">
             <div className="grid-item-text">
-              <div className="chat-indicators mb-3 d-flex justify-content-center gap-2">
-                <div className="indicator online"></div>
-                <div className="indicator away"></div>
-                <div className="indicator busy"></div>
-              </div>
+              <CardIcon name="chat" />
               <h3 className="text-lg font-bold mb-2 chat-title">Переписка</h3>
               <p className="text-xs mb-3 chat-subtitle">Нажмите, чтобы открыть</p>
               <div className="chat-preview mb-3">
@@ -414,34 +450,134 @@ const GridPage = memo(() => {
           </div>
         );
     }
-  }, [open, showVideo]);
+  }, [activeYear, allSectionsVisited, isLetterPuzzleSolved, isStoryPuzzleSolved, yearContent]);
 
   // Consolidate all modal close functions
   const closeModal = useCallback(() => {
     setActiveItem(null);
-    setIsOpen(false);
-    setShowCitation(false);
-    setShowMap(false);
     setShowLetter(false);
     setShowVideo(false);
+    setSelectedPhoto(null);
+    setStoryIndex(0);
     setModalType(null);
   }, []);
 
+  const selectYear = useCallback((year) => {
+    if (year === activeYear) return;
+    closeModal();
+    setActiveYear(year);
+  }, [activeYear, closeModal]);
+
+  const unlockAndOpenLetter = useCallback(() => {
+    setPuzzlesSolvedByYear((previous) => {
+      const solvedForYear = previous[activeYear] ?? new Set();
+      return { ...previous, [activeYear]: new Set(solvedForYear).add('letter') };
+    });
+    markAsVisited('letter');
+    setActiveItem(items.find((item) => item.type === 'letter'));
+    setShowLetter(true);
+    setModalType('letter');
+  }, [activeYear, markAsVisited]);
+
+  const unlockAndOpenStories = useCallback(() => {
+    setPuzzlesSolvedByYear((previous) => {
+      const solvedForYear = previous[activeYear] ?? new Set();
+      return { ...previous, [activeYear]: new Set(solvedForYear).add('stories') };
+    });
+    markAsVisited('chat');
+    setActiveItem(items.find((item) => item.type === 'chat'));
+    setStoryIndex(0);
+    setModalType('chat');
+  }, [activeYear, markAsVisited]);
+
   return (
-    <div className="relative bg-gray-100 overflow-hidden">
-      {/* GRID */}
-      {!modalType && (
-        <div className="parent" style={{ width: '100vw', height: '100vh' }}>
-          {items.map((item) => (
-            <div
+    <div className="love-experience">
+      {/* Keep the dashboard mounted so every popup opens over the current chapter. */}
+      <main className={`love-dashboard ${modalType ? "has-open-modal" : ""}`}>
+          <nav className="year-switcher" aria-label="Выбрать год воспоминаний">
+            {AVAILABLE_YEARS.map((year) => (
+              <button
+                type="button"
+                key={year}
+                className={`year-switcher__option ${year === activeYear ? "is-active" : ""}`}
+                aria-pressed={year === activeYear}
+                onClick={() => selectYear(year)}
+              >
+                <span>{year}</span>
+                <small>{YEAR_DATA[year].label}</small>
+              </button>
+            ))}
+          </nav>
+
+          {yearContent.isTeaser ? (
+            <section className="future-chapter" aria-label="Продолжение истории в 2027 году">
+              <div className="future-chapter__orbit future-chapter__orbit--one" aria-hidden="true" />
+              <div className="future-chapter__orbit future-chapter__orbit--two" aria-hidden="true" />
+              <div className="future-chapter__content">
+                <p>ГЛАВА {activeYear}</p>
+                <h1>To be<br /><em>continued</em></h1>
+                <div className="future-chapter__dots" aria-label="Продолжение следует">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+                <small>Самое красивое ещё впереди</small>
+              </div>
+              <span className="future-chapter__folio">{activeYear} / ∞</span>
+            </section>
+          ) : (
+          <>
+          <header className="dashboard-header">
+            <div key={activeYear} className="year-heading">
+              <p className="dashboard-kicker">{yearContent.kicker}</p>
+              <h1>Всё, что хочется<br /><em>помнить всегда</em></h1>
+            </div>
+            <div className="dashboard-note" aria-label="Послание">
+              <span>для тебя</span>
+              <strong>с любовью</strong>
+              <span aria-hidden="true">♥</span>
+            </div>
+          </header>
+
+          <section key={activeYear} className="parent" aria-label={`Наши воспоминания за ${activeYear} год`}>
+          {items.filter((item) => item.type !== "video").map((item) => (
+            <button
+              type="button"
               key={item.id}
-              className={`${item.area} flex items-center justify-center 
-      text-white font-semibold rounded-xl cursor-pointer transition-all duration-300`}
-              style={{ backgroundColor: item.bg }}
+              className={`${item.area} dashboard-card dashboard-card--${item.type}`}
+              data-year={activeYear}
               onClick={(e) => {
                 e.stopPropagation();
                 // Close any open modals first
                 closeModal();
+
+                if (item.type === 'letter' && activeYear === '2026') {
+                  markAsVisited(item.id);
+                  setActiveItem(item);
+                  setModalType('chat-wrapped');
+                  return;
+                }
+
+                if (item.type === 'letter' && !isLetterPuzzleSolved) {
+                  setActiveItem(item);
+                  setModalType('kiss-game');
+                  return;
+                }
+
+                if (item.type === 'chat' && activeYear === '2026' && !isStoryPuzzleSolved) {
+                  setActiveItem(item);
+                  setModalType('best-leva-game');
+                  return;
+                }
+
+                if (item.type === 'timeline' && activeYear === '2026') {
+                  markAsVisited(item.id);
+                  setActiveItem(item);
+                  setModalType('who-said-game');
+                  return;
+                }
+
+                markAsVisited(item.id);
 
                 // Handle each item type with its specific modal state
                 switch (item.type) {
@@ -451,12 +587,10 @@ const GridPage = memo(() => {
                     setModalType('letter');
                     break;
                   case "map":
-                    setShowMap(true);
                     setActiveItem(item); // Add this line to ensure markAsVisited is called
                     setModalType('map');
                     break;
                   case "citation":
-                    setShowCitation(true);
                     setActiveItem(item); // Add this line to ensure markAsVisited is called
                     setModalType('citation');
                     break;
@@ -475,22 +609,20 @@ const GridPage = memo(() => {
                     // For chat, photos, timeline and other items
                     setActiveItem(item);
                     setModalType(item.type);
-                    if (item.id === "chat") {
-                      onOpen();
-                    }
                     break;
                 }
               }}
             >
               {renderItemContent(item)}
-            </div>
+            </button>
           ))}
 
           {/* Special button that appears after visiting all sections */}
-          <div
-            className={`div7 flex items-center justify-center text-white font-semibold rounded-xl cursor-pointer transition-all duration-300 ${allSectionsVisited ? 'special-surprise-available' : 'opacity-75'
+          <button
+            type="button"
+            className={`div7 dashboard-card dashboard-card--surprise ${allSectionsVisited ? 'special-surprise-available' : 'is-locked'
               }`}
-            style={{ gridArea: '1 / 3 / 3 / 4' }}
+            aria-disabled={!allSectionsVisited}
             onClick={(e) => {
               e.stopPropagation();
               if (allSectionsVisited) {
@@ -509,7 +641,10 @@ const GridPage = memo(() => {
           >
             <div className="grid-item-container">
               <div className="grid-item-text">
-                <h3 className="text-lg font-bold mb-1">🎉 Специальный сюрприз</h3>
+                <div className="surprise-title-wrap">
+                  <h3 className="text-lg font-bold mb-1">Специальный сюрприз</h3>
+                  {!allSectionsVisited && <span className="surprise-lock" aria-hidden="true" />}
+                </div>
                 {allSectionsVisited ? (
                   <>
                     <p className="text-xs mb-2">Вы посетили все разделы</p>
@@ -517,18 +652,27 @@ const GridPage = memo(() => {
                 ) : (
                   <>
                     <p className="text-xs mb-2">Заблокировано</p>
-                    <div className="lock-icon mb-2">🔒</div>
                     <p className="text-xs">Посетите все разделы</p>
                     <div className="text-xs mt-2 opacity-75">
-                      {allSections.filter(section => !visitedItems.has(section)).length} осталось
+              {REQUIRED_SECTION_IDS.filter(section => !visitedItems.has(section)).length} осталось
                     </div>
                   </>
                 )}
               </div>
             </div>
-          </div>
-        </div>
-      )}
+          </button>
+          </section>
+
+          <footer className="dashboard-footer">
+            <span>{REQUIRED_SECTION_IDS.filter(section => visitedItems.has(section)).length} / {REQUIRED_SECTION_IDS.length} открыто</span>
+            <div className="dashboard-progress" aria-hidden="true">
+              <span style={{ width: `${REQUIRED_SECTION_IDS.filter(section => visitedItems.has(section)).length / REQUIRED_SECTION_IDS.length * 100}%` }} />
+            </div>
+            <span>{activeYear} · наша глава</span>
+          </footer>
+          </>
+          )}
+      </main>
 
       {/* FULLSCREEN VIDEO MODAL - Bootstrap Modal */}
       <Modal
@@ -537,27 +681,23 @@ const GridPage = memo(() => {
         fullscreen={true}
         backdrop="static"
         keyboard={false}
-        className="citation-modal"
+        className="citation-modal video-modal experience-fullscreen-modal"
         backdropClassName="bg-dark"
       >
-        <Modal.Header className="citation-header" closeButton>
-          <Modal.Title className="text-white w-100 text-center">
-            <div className="citation-icon">🎬</div>
-            <div className="citation-title">Специальный сюрприз</div>
-          </Modal.Title>
-        </Modal.Header>
         <Modal.Body className="citation-body p-0">
           <div className="citation-content h-100 d-flex align-items-center justify-content-center">
             {showVideo ? (
               <VideoScreen
-                src="/assets/video_2025-10-06_20-16-58.mp4"
+                src={yearContent.surpriseVideo.src}
+                poster={yearContent.surpriseVideo.poster}
+                title={yearContent.surpriseVideo.title}
                 onFinish={() => {
                   setShowVideo(false);
                   setModalType(null);
                 }}
               />
             ) : (
-              <div className="text-center text-white w-100">
+              <div className="text-center video-placeholder w-100">
                 <div className="display-1 mb-4">❤️</div>
                 <h2 className="mb-3">Здесь будет твое видео</h2>
                 <p className="mb-4 lead">Это место для твоего особенного видео-сюрприза!</p>
@@ -573,21 +713,14 @@ const GridPage = memo(() => {
             )}
           </div>
         </Modal.Body>
-        <Modal.Footer className="citation-footer">
-          <Button
-            variant="outline-light"
-            onClick={closeModal}
-            className="rounded-pill px-4"
-          >
-            Закрыть
-          </Button>
-        </Modal.Footer>
       </Modal>
 
       {/* VIDEO SCREEN - Fullscreen */}
       {showVideo && !activeItem && (
         <VideoScreen
-          src="/assets/video_2025-10-06_20-16-58.mp4"
+          src={yearContent.surpriseVideo.src}
+          poster={yearContent.surpriseVideo.poster}
+          title={yearContent.surpriseVideo.title}
           onFinish={() => {
             setShowVideo(false);
             setModalType(null);
@@ -598,25 +731,24 @@ const GridPage = memo(() => {
       <Modal
         show={modalType === "citation"}
         onHide={closeModal}
-        centered
-        size="lg"
+        fullscreen
         backdropClassName="bg-dark bg-opacity-50"
-        className="citation-modal"
+        className="citation-modal experience-fullscreen-modal quote-fullscreen-modal"
       >
-        <Modal.Header className="bg-gradient citation-header" closeButton>
-          <Modal.Title className="text-white w-100 text-center">
-            <div className="citation-icon">❝</div>
+        <Modal.Header className="citation-header" closeButton>
+          <Modal.Title className="w-100 text-center">
+            <div className="modal-eyebrow">СЛОВА, КОТОРЫЕ ОСТАЛИСЬ</div>
             <div className="citation-title">Вечная мудрость</div>
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="citation-body">
           <div className="citation-content">
             <blockquote className="citation-text">
-              {items.find(item => item.id === "text")?.label}
+              {yearContent.quote.text}
             </blockquote>
             <div className="citation-author">
-              <div className="author-name">— {items.find(item => item.id === "text")?.author}</div>
-              <div className="author-era">{items.find(item => item.id === "text")?.year}</div>
+              <div className="author-name">— {yearContent.quote.author}</div>
+              <div className="author-era">{yearContent.quote.date}</div>
             </div>
             <div className="citation-decoration">
               <div className="decoration-element"></div>
@@ -625,29 +757,52 @@ const GridPage = memo(() => {
             </div>
           </div>
         </Modal.Body>
-        <Modal.Footer className="citation-footer">
-          <Button
-            variant="outline-light"
-            onClick={closeModal}
-            className="rounded-pill px-4"
-          >
-            Закрыть
-          </Button>
-        </Modal.Footer>
+      </Modal>
+
+      {/* TELEGRAM WRAPPED FOR 2026 */}
+      <Modal
+        show={modalType === "chat-wrapped" && activeYear === "2026"}
+        onHide={closeModal}
+        fullscreen
+        backdrop="static"
+        keyboard={false}
+        className="chat-wrapped-modal experience-fullscreen-modal"
+      >
+        <Modal.Body className="p-0 overflow-hidden">
+          <ChatWrapped onClose={closeModal} />
+        </Modal.Body>
+      </Modal>
+
+      {/* LETTER PUZZLE */}
+      <Modal
+        show={modalType === "kiss-game"}
+        onHide={closeModal}
+        fullscreen
+        backdrop="static"
+        className="kiss-game-modal citation-modal experience-fullscreen-modal"
+      >
+        <Modal.Header className="kiss-game-header" closeButton>
+          <Modal.Title>
+            <div className="modal-eyebrow">МИНИ-ИГРА · ГЛАВА {activeYear}</div>
+            <div className="citation-title">Сначала поймай поцелуи</div>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="kiss-game-body">
+          <KissCatchGame key={`${activeYear}-${modalType}`} onComplete={unlockAndOpenLetter} />
+        </Modal.Body>
       </Modal>
 
       {/* LETTER MODAL - Bootstrap Modal */}
       <Modal
         show={modalType === "letter" && showLetter}
         onHide={closeModal}
-        size="lg"
-        centered
+        fullscreen
         backdropClassName="bg-dark bg-opacity-50"
-        className="citation-modal"
+        className="citation-modal experience-fullscreen-modal letter-fullscreen-modal"
       >
         <Modal.Header className="letter-modal-header" closeButton>
-          <Modal.Title className="text-white w-100 text-center">
-            <div className="letter-modal-icon">💌</div>
+          <Modal.Title className="w-100 text-center">
+            <div className="modal-eyebrow">ЛИЧНОЕ ПИСЬМО</div>
             <div className="letter-modal-title">Любимая, для тебя</div>
             <div className="letter-modal-subtitle mt-2">С любовью от всей души</div>
           </Modal.Title>
@@ -675,36 +830,35 @@ const GridPage = memo(() => {
             </div>
           </div>
         </Modal.Body>
-        <Modal.Footer className="letter-modal-footer">
-          <Button
-            variant="outline-light"
-            onClick={closeModal}
-            className="rounded-pill px-4"
-          >
-            Свернуть письмо
-          </Button>
-        </Modal.Footer>
       </Modal>
 
       {/* MAP MODAL - Bootstrap Modal */}
       <Modal
         show={modalType === "map"}
         onHide={closeModal}
-        size="xl"
-        centered
+        fullscreen
         backdropClassName="bg-dark bg-opacity-70"
-        className="map-modal citation-modal"
+        className="map-modal citation-modal experience-fullscreen-modal"
       >
         <Modal.Header className="map-header citation-header" closeButton>
-          <Modal.Title className="text-white w-100 text-center">
-            <div className="map-icon citation-icon">🗺️</div>
-            <div className="map-title citation-title">Наша карта</div>
-            <div className="map-subtitle mt-2">Места, которые мы запомнили вместе</div>
+          <Modal.Title className="w-100 text-center">
+            <div className="modal-eyebrow">ГЕОГРАФИЯ НАШИХ ВОСПОМИНАНИЙ</div>
+            <div className="map-title citation-title">Наша карта · {activeYear}</div>
+            <div className="map-subtitle mt-2">Места, которые мы запомнили в этой главе</div>
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="map-body citation-body">
           <div className="map-content citation-content">
-            <div className="map-container" style={{ height: "75vh", width: "100%", borderRadius: "15px", overflow: "hidden", boxShadow: "0 10px 30px rgba(0,0,0,0.3)" }}>
+            {yearContent.markers.length > 0 ? (
+            <div className="map-frame">
+              <div className="map-chapter-bar">
+                <div>
+                  <span>ГЛАВА {activeYear}</span>
+                  <strong>{yearContent.markers.length} {yearContent.route ? 'точек маршрута' : 'памятных мест'}</strong>
+                </div>
+                <p>{yearContent.routeMeta || 'Нажми на фотографию, чтобы вспомнить историю точки'}</p>
+              </div>
+            <div className="map-container">
               <MapContainer
                 center={[49, 32]}
                 zoom={6}
@@ -717,44 +871,57 @@ const GridPage = memo(() => {
                   attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a>'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                {/* Photo thumbnails displayed directly on the map */}
-                {markers.map((m) => (
+                <MapViewport markers={yearContent.markers} />
+                {yearContent.route && (
+                  <>
+                    <Polyline
+                      positions={yearContent.route}
+                      pathOptions={{ color: '#fff8fb', weight: 10, opacity: 0.88, lineCap: 'round', lineJoin: 'round' }}
+                    />
+                    <Polyline
+                      positions={yearContent.route}
+                      pathOptions={{ color: '#c94f7c', weight: 5, opacity: 0.95, lineCap: 'round', lineJoin: 'round' }}
+                    />
+                  </>
+                )}
+                {yearContent.markers.map((marker) => marker.photo ? (
                   <PhotoMarker
-                    key={m.id}
-                    position={m.position}
-                    photo={m.photo}
-                    text={m.text}
+                    key={marker.id}
+                    position={marker.position}
+                    photo={marker.photo}
+                    text={marker.text}
                   />
+                ) : (
+                  <RouteMarker key={marker.id} {...marker} />
                 ))}
                 {/* Add a decorative compass */}
                 <div className="map-compass">🧭</div>
               </MapContainer>
             </div>
+            </div>
+            ) : (
+              <div className="year-empty-state">
+                <span className="year-empty-state__icon" aria-hidden="true">⌖</span>
+                <p className="year-empty-state__eyebrow">ГЛАВА {activeYear}</p>
+                <h3>Новые точки появятся здесь</h3>
+                <p>{yearContent.mapEmptyText}</p>
+              </div>
+            )}
           </div>
         </Modal.Body>
-        <Modal.Footer className="map-footer citation-footer">
-          <Button
-            variant="outline-light"
-            onClick={closeModal}
-            className="rounded-pill px-4 map-close-btn"
-          >
-            Закрыть карту
-          </Button>
-        </Modal.Footer>
       </Modal>
 
       <Modal
-        show={modalType === "timeline"}
+        show={modalType === "timeline" && activeYear === "2025"}
         onHide={closeModal}
-        size="lg"
-        centered
+        fullscreen
         backdropClassName="bg-dark bg-opacity-50"
-        className="citation-modal"
+        className="citation-modal experience-fullscreen-modal timeline-fullscreen-modal"
       >
         <Modal.Header className="citation-header" closeButton>
-          <Modal.Title className="text-white w-100 text-center">
-            <div className="citation-icon">⏳</div>
-            <div className="citation-title">Наша Хронология</div>
+          <Modal.Title className="w-100 text-center">
+            <div className="modal-eyebrow">ПО ГЛАВАМ И ДАТАМ</div>
+            <div className="citation-title">Наша хронология · {activeYear}</div>
             <div className="citation-subtitle mt-2">История нашей любви</div>
           </Modal.Title>
         </Modal.Header>
@@ -766,7 +933,7 @@ const GridPage = memo(() => {
                 <div className="position-absolute start-0 top-0 bottom-0 w-1 bg-danger bg-opacity-25 translate-middle-x" style={{ backgroundColor: 'black', marginLeft: '16px' }}></div>
 
                 {/* Timeline events */}
-                {timelineEvents.map((event, index) => (
+                {yearContent.timeline.map((event, index) => (
                   <div key={event.id} className="d-flex mb-4 timeline-event-item">
                     <div className="d-flex flex-column align-items-center me-3 timeline-event-marker">
                       <div className="d-flex align-items-center justify-content-center rounded-circle bg-danger shadow timeline-event-number"
@@ -797,209 +964,267 @@ const GridPage = memo(() => {
             </div>
           </div>
         </Modal.Body>
-        <Modal.Footer className="citation-footer">
-          <Button
-            variant="outline-light"
-            onClick={closeModal}
-            className="rounded-pill px-4"
-          >
-            Закрыть
-          </Button>
-        </Modal.Footer>
       </Modal>
 
-      {/* CHAT MODAL - Bootstrap Modal */}
+      {/* INSTAGRAM-LIKE STORIES FOR 2026 */}
       <Modal
-        show={modalType === "chat"}
+        show={modalType === "best-leva-game" && activeYear === "2026"}
         onHide={closeModal}
-        size="lg"
-        centered
+        fullscreen
+        backdrop="static"
+        keyboard={false}
+        className="best-leva-modal experience-fullscreen-modal"
+      >
+        <Modal.Body className="best-leva-modal__body">
+          <BestLevaGame onComplete={unlockAndOpenStories} onClose={closeModal} />
+        </Modal.Body>
+      </Modal>
+
+      <Modal
+        show={modalType === "chat" && activeYear === "2026"}
+        onHide={closeModal}
+        fullscreen
+        backdropClassName="story-backdrop"
+        className="story-modal experience-fullscreen-modal"
+      >
+        <Modal.Body className="story-modal-body">
+          <article
+            className="story-viewer"
+            onTouchStart={(event) => { storyTouchStartX.current = event.changedTouches[0].clientX; }}
+            onTouchEnd={(event) => {
+              if (storyTouchStartX.current === null) return;
+              const distance = event.changedTouches[0].clientX - storyTouchStartX.current;
+              if (distance > 45) setStoryIndex(index => Math.max(0, index - 1));
+              if (distance < -45) setStoryIndex(index => Math.min(storySlides.length - 1, index + 1));
+              storyTouchStartX.current = null;
+            }}
+          >
+            <img
+              key={storySlides[storyIndex].id}
+              className="story-image"
+              src={storySlides[storyIndex].src}
+              alt={`История ${storyIndex + 1}: ${storySlides[storyIndex].question}`}
+            />
+            <span className="story-image-shade" aria-hidden="true" />
+
+            <div className="story-progress" aria-label={`История ${storyIndex + 1} из ${storySlides.length}`}>
+              {storySlides.map((story, index) => (
+                <button
+                  type="button"
+                  key={story.id}
+                  className={index <= storyIndex ? "is-viewed" : ""}
+                  onClick={() => setStoryIndex(index)}
+                  aria-label={`Открыть историю ${index + 1}`}
+                ><span /></button>
+              ))}
+            </div>
+
+            <div className="story-user">
+              <div className="story-avatar">Л</div>
+              <strong>наша.история</strong>
+              <span>сейчас</span>
+            </div>
+
+            <button type="button" className="story-close" onClick={closeModal} aria-label="Закрыть истории">×</button>
+            <button
+              type="button"
+              className="story-tap-zone story-tap-zone--previous"
+              onClick={() => setStoryIndex(index => Math.max(0, index - 1))}
+              disabled={storyIndex === 0}
+              aria-label="Предыдущая история"
+            />
+            <button
+              type="button"
+              className="story-tap-zone story-tap-zone--next"
+              onClick={() => setStoryIndex(index => Math.min(storySlides.length - 1, index + 1))}
+              disabled={storyIndex === storySlides.length - 1}
+              aria-label="Следующая история"
+            />
+
+            <div className="story-poll">
+              <p>{storySlides[storyIndex].question}</p>
+              <div className="story-poll-options">
+                {storySlides[storyIndex].options.map((option) => {
+                  const selectedVote = storyVotes[storySlides[storyIndex].id];
+                  const isSelected = selectedVote === option;
+                  const percent = selectedVote ? (isSelected ? 86 : 14) : null;
+                  return (
+                    <button
+                      type="button"
+                      key={option}
+                      className={isSelected ? "is-selected" : ""}
+                      onClick={() => setStoryVotes(votes => ({ ...votes, [storySlides[storyIndex].id]: option }))}
+                    >
+                      {percent !== null && <span className="story-poll-fill" style={{ width: `${percent}%` }} />}
+                      <strong>{option}</strong>
+                      {percent !== null && <small>{percent}%</small>}
+                    </button>
+                  );
+                })}
+              </div>
+              <small>{storyVotes[storySlides[storyIndex].id] ? "Голос учтён ♥" : "Выбери ответ"}</small>
+            </div>
+
+            <div className="story-reply">Ответить… <span>♡</span></div>
+          </article>
+        </Modal.Body>
+      </Modal>
+
+      {/* TELEGRAM-LIKE CHAT FOR 2025 */}
+      <Modal
+        show={modalType === "chat" && activeYear === "2025"}
+        onHide={closeModal}
+        fullscreen
         backdropClassName="bg-dark bg-opacity-50"
-        className="enhanced-chat-modal"
+        className="enhanced-chat-modal telegram-chat experience-fullscreen-modal"
       >
         <Modal.Header className="chat-header" closeButton>
           <div className="chat-header-content w-100">
-            <div className="d-flex align-items-center justify-content-between">
-              <div className="d-flex align-items-center">
-                <div className="chat-avatar sent me-3">
-                  <span className="avatar-initials">Л</span>
-                </div>
-                <div>
-                  <h2 className="chat-username mb-0">Любимая</h2>
-                  <p className="chat-status mb-0">Онлайн</p>
-                </div>
+            <div className="chat-header-profile">
+              <div className="chat-avatar chat-avatar--main">
+                <span className="avatar-initials">Л</span>
+                <i aria-hidden="true" />
               </div>
-              <div className="chat-icon">💬</div>
+              <div>
+                <h2 className="chat-username">Любимая</h2>
+                <p className={`chat-status ${isTyping ? "is-typing" : ""}`}>
+                  {isTyping ? "печатает…" : "была недавно"}
+                </p>
+              </div>
             </div>
           </div>
         </Modal.Header>
         <Modal.Body className="chat-modal-body p-0">
-          <div className="d-flex flex-column h-100">
-            {/* Chat messages container */}
-            <div className="flex-grow-1 overflow-auto p-3 chat-messages-container" style={{ maxHeight: '60vh' }}>
-              {visibleMessages.map((msg, idx) => (
-                <div
-                  key={msg.id}
-                  className={`mb-3 chat-message ${msg.author === "system" ? "text-center" : ""}`}
-                >
+          <div className="telegram-shell">
+            <div className="chat-messages-container">
+              <div className="chat-date-pill">26 ИЮНЯ 2025</div>
+              {visibleMessages.map((msg) => (
+                <div key={msg.id} className={`chat-message-row chat-message-row--${msg.author}`}>
                   {msg.author === "system" ? (
-                    // System message
-                    <div className="d-inline-block p-2 rounded system-message">
+                    <div className="system-message">
                       {msg.text}
                     </div>
                   ) : (
-                    // Regular chat message
-                    <div
-                      className={`d-flex ${msg.author === "me" ? "justify-content-end" : "justify-content-start"}`}
-                    >
-                      {msg.author === "she" && (
-                        <div className="avatar me-2 d-flex align-items-end">
-                          <div className="chat-avatar received">
-                            <span className="avatar-initials">Л</span>
-                          </div>
-                        </div>
-                      )}
-                      <div
-                        className={`p-3 rounded chat-bubble ${msg.author === "me"
-                          ? "sent"
-                          : "received"
-                          }`}
-                      >
-                        <div className="message-text">{msg.text}</div>
-                        <div className={`text-end small mt-1 message-time ${msg.author === "me" ? "sent-time" : "received-time"
-                          }`}>
-                          {msg.time}
-                        </div>
-                      </div>
-                      {msg.author === "me" && (
-                        <div className="avatar ms-2 d-flex align-items-end">
-                          <div className="chat-avatar sent">
-                            <span className="avatar-initials">Я</span>
-                          </div>
-                        </div>
-                      )}
+                    <div className={`chat-bubble ${msg.author === "me" ? "sent" : "received"}`}>
+                      <span className="message-text">{msg.text}</span>
+                      <span className="message-meta">
+                        {msg.time}
+                        {msg.author === "me" && <span className="message-checks" aria-label="прочитано">✓✓</span>}
+                      </span>
                     </div>
                   )}
                 </div>
               ))}
+              {isTyping && (
+                <div className="chat-message-row chat-message-row--she">
+                  <div className="typing-bubble" aria-label="Любимая печатает">
+                    <span /><span /><span />
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
             </div>
 
-            {/* Chat input area */}
             <div className="chat-input-area">
-              <div className="d-flex align-items-center">
+              <button type="button" className="chat-tool-button" aria-label="Прикрепить файл">＋</button>
+              <div className="chat-input-wrap">
                 <input
                   type="text"
-                  className="form-control chat-input flex-grow-1"
-                  placeholder="Написать сообщение..."
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      // Simulate sending a message
-                      console.log("Message sent");
-                    }
-                  }}
+                  className="chat-input"
+                  placeholder="Сообщение"
                 />
-                <button className="btn btn-primary send-button d-flex align-items-center">
+                <span aria-hidden="true">♡</span>
+              </div>
+                <button type="button" className="send-button" aria-label="Отправить сообщение">
                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-send" viewBox="0 0 16 16">
                     <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z" />
                   </svg>
                 </button>
-              </div>
             </div>
           </div>
         </Modal.Body>
-        <Modal.Footer className="citation-footer">
-          <Button
-            variant="outline-light"
-            onClick={closeModal}
-            className="rounded-pill px-4"
-          >
-            Закрыть
-          </Button>
-        </Modal.Footer>
       </Modal>
 
       {/* PHOTO EXPLORER - Bootstrap Modal */}
       <Modal
+        show={modalType === "who-said-game" && activeYear === "2026"}
+        onHide={closeModal}
+        fullscreen
+        backdrop="static"
+        className="who-said-modal citation-modal experience-fullscreen-modal"
+      >
+        <Modal.Header className="who-said-modal__header" closeButton>
+          <Modal.Title>
+            <div className="modal-eyebrow">МИНИ-ИГРА · АРХИВ ПЕРЕПИСКИ</div>
+            <div className="citation-title">Кто из нас это написал?</div>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="who-said-modal__body">
+          <WhoSaidItGame key={`${activeYear}-${modalType}`} onClose={closeModal} />
+        </Modal.Body>
+      </Modal>
+
+      <Modal
         show={modalType === "photos"}
         onHide={closeModal}
-        size="xl"
-        centered
+        fullscreen
         backdropClassName="bg-dark bg-opacity-50"
-        className="citation-modal photo-modal"
+        className="citation-modal photo-modal experience-fullscreen-modal"
       >
         <Modal.Header className="photo-modal-header" closeButton>
-          <Modal.Title className="text-white w-100 text-center">
-            <div className="photo-modal-icon">📸</div>
-            <div className="photo-modal-title">Наш Фотоальбом</div>
+          <Modal.Title className="w-100 text-center">
+            <div className="modal-eyebrow">ЛИЧНЫЙ ФОТОАРХИВ</div>
+            <div className="photo-modal-title">Наш фотоальбом · {activeYear}</div>
           </Modal.Title>
         </Modal.Header>
         <Modal.Body className="photo-modal-body">
           <div className="citation-content">
-            <div className="photo-gallery-header mb-4">
-              <h2 className="photo-gallery-title">Наш Фотоальбом</h2>
-              <p className="text-white mb-3 opacity-75">Воспоминания, которые мы создали вместе</p>
-              <div className="photo-gallery-stats">
-                <span className="photo-count-badge">
-                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-images" viewBox="0 0 16 16">
-                    <path d="M4 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H4zm0 1h8a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1z" />
-                    <path d="M6.5 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm7 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm-7 6a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm7 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
-                  </svg>
-                  {photoData.length} фотографий
-                </span>
+            <div className="photo-gallery-header">
+              <div>
+                <span className="photo-gallery-index">КОЛЛЕКЦИЯ / {activeYear}</span>
+                <h2 className="photo-gallery-title">Моменты без постановки</h2>
               </div>
+              <p>{yearContent.photos.length} кадров<br />одной главы</p>
             </div>
 
             <div className="photo-gallery">
-              <Row>
-                {photoData.map((photo, index) => (
-                  <Col md={4} className="mb-4" key={photo.id}>
-                    <Card className="h-100 shadow-sm photo-card">
-                      <div className="photo-card-image-wrapper">
-                        <Card.Img
-                          variant="top"
-                          src={photo.src}
-                          alt={photo.name}
-                          className="photo-card-img"
-                          onError={(e) => {
-                            e.target.src = 'https://placehold.co/300x250/cccccc/ffffff?text=Фото+не+найдено';
-                          }}
-                        />
-                      </div>
-                      <Card.Body className="d-flex flex-column">
-                        <Card.Title className="photo-card-title">{photo.name}</Card.Title>
-                        <Card.Text className="flex-grow-1 photo-card-description">{photo.description}</Card.Text>
-                        <div className="d-flex justify-content-between align-items-center mt-auto">
-                          <small className="text-white opacity-75">Фото #{index + 1}</small>
-                        </div>
-                      </Card.Body>
-                    </Card>
-                  </Col>
-                ))}
-              </Row>
+              {yearContent.photos.map((photo, index) => (
+                <button
+                  type="button"
+                  className="photo-card"
+                  key={photo.id}
+                  onClick={() => setSelectedPhoto({ ...photo, index })}
+                  aria-label={photo.name ? `Открыть «${photo.name}»` : `Открыть фотографию ${index + 1}`}
+                >
+                  <img
+                    src={photo.src}
+                    alt={photo.name || `Фотография ${index + 1} за ${activeYear} год`}
+                    className="photo-card-img"
+                    loading="lazy"
+                    decoding="async"
+                    onError={(event) => { event.currentTarget.style.display = 'none'; }}
+                  />
+                  <span className="photo-card-shade" aria-hidden="true" />
+                  <span className={`photo-card-caption ${photo.name ? 'has-title' : 'is-untitled'}`}>
+                    <small>КАДР {String(index + 1).padStart(2, '0')} / {activeYear}</small>
+                    {photo.name && <strong>{photo.name}</strong>}
+                  </span>
+                </button>
+              ))}
             </div>
+
+            {selectedPhoto && (
+              <div className="photo-lightbox" role="dialog" aria-modal="true" aria-label={selectedPhoto.name || `Фотография ${selectedPhoto.index + 1}`}>
+                <button type="button" className="photo-lightbox__close" onClick={() => setSelectedPhoto(null)} aria-label="Закрыть фотографию">×</button>
+                <img src={selectedPhoto.src} alt={selectedPhoto.name || `Фотография ${selectedPhoto.index + 1} за ${activeYear} год`} />
+                <div className="photo-lightbox__caption">
+                  <span>КАДР {String(selectedPhoto.index + 1).padStart(2, '0')} ИЗ {yearContent.photos.length}</span>
+                  {selectedPhoto.name && <strong>{selectedPhoto.name}</strong>}
+                </div>
+              </div>
+            )}
           </div>
         </Modal.Body>
-        <Modal.Footer className="photo-modal-footer">
-          <div className="photo-modal-footer-content">
-            <div className="photo-stats">
-              <span className="text-white opacity-75">
-                <span className="fw-bold">{photoData.length}</span> фотографий в альбоме
-              </span>
-            </div>
-            <div className="photo-modal-actions">
-              <Button
-                variant="outline-light"
-                className="me-2 rounded-pill px-4 photo-action-btn"
-                onClick={closeModal}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" className="bi bi-x-lg" viewBox="0 0 16 16">
-                  <path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.146 5.147a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854Z" />
-                </svg>
-                Закрыть
-              </Button>
-            </div>
-          </div>
-        </Modal.Footer>
       </Modal>
 
 
