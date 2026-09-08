@@ -5,6 +5,7 @@ export default defineConfig({
   plugins: [react()],
   publicDir: 'static',
   build: {
+    outDir: 'build',
     sourcemap: false,
     target: 'es2020',
   },
